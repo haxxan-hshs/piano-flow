@@ -36,7 +36,13 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 2rem;
+  padding: 1rem;
+}
+
+@media (min-width: 768px) {
+  #root {
+    padding: 2rem;
+  }
 }
 
 .glass-panel {
@@ -50,42 +56,82 @@ body {
 
 /* Piano Styles */
 .piano-container {
-  padding: 3rem;
+  padding: 1rem;
   margin-top: 1rem;
   width: 100%;
   max-width: 1100px;
   position: relative;
-  overflow: visible; /* To allow notes to rise out */
+  overflow: hidden;
+  border-radius: 24px;
+}
+
+@media (min-width: 768px) {
+  .piano-container {
+    padding: 3rem;
+    overflow: visible;
+    border-radius: 32px;
+  }
 }
 
 .keyboard {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   position: relative;
-  height: 280px;
+  height: 200px;
   user-select: none;
   z-index: 10;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.keyboard::-webkit-scrollbar {
+  height: 4px;
+}
+
+.keyboard::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.2);
+  border-radius: 10px;
+}
+
+@media (min-width: 768px) {
+  .keyboard {
+    justify-content: center;
+    height: 280px;
+    overflow-x: visible;
+  }
 }
 
 .key {
   position: relative;
   cursor: pointer;
   transition: all 0.1s ease;
+  flex-shrink: 0;
 }
 
 .white-key {
-  width: 60px;
-  height: 280px;
+  width: 40px;
+  height: 200px;
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid #e2e8f0;
-  border-radius: 0 0 12px 12px;
-  margin: 0 3px;
+  border-radius: 0 0 8px 8px;
+  margin: 0 2px;
   z-index: 1;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding-bottom: 1rem;
+  padding-bottom: 0.5rem;
   box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+@media (min-width: 768px) {
+  .white-key {
+    width: 60px;
+    height: 280px;
+    border-radius: 0 0 12px 12px;
+    margin: 0 3px;
+    padding-bottom: 1rem;
+  }
 }
 
 .white-key.active {
@@ -95,18 +141,29 @@ body {
 }
 
 .black-key {
-  width: 36px;
-  height: 170px;
+  width: 24px;
+  height: 120px;
   background: #334155;
   border: 1px solid #1e293b;
-  border-radius: 0 0 6px 6px;
-  margin-left: -18px;
-  margin-right: -18px;
+  border-radius: 0 0 4px 4px;
+  margin-left: -12px;
+  margin-right: -12px;
   z-index: 2;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+}
+
+@media (min-width: 768px) {
+  .black-key {
+    width: 36px;
+    height: 170px;
+    border-radius: 0 0 6px 6px;
+    margin-left: -18px;
+    margin-right: -18px;
+    padding-bottom: 0.75rem;
+  }
 }
 
 .black-key.active {
@@ -134,6 +191,22 @@ body {
   border-radius: 4px 4px 0 0;
   pointer-events: none;
   z-index: 1;
+}
+
+.visualizer-container {
+  width: 100%;
+  height: 100px;
+  margin-bottom: 2rem;
+  border-radius: 24px;
+  overflow: hidden;
+  background: rgba(0,0,0,0.05);
+}
+
+@media (min-width: 768px) {
+  .visualizer-container {
+    height: 150px;
+    margin-bottom: 3rem;
+  }
 }
 
 /* Controls & UI */
@@ -222,16 +295,26 @@ body {
 /* Sidebar Styles */
 .sidebar {
   position: fixed;
-  left: -320px;
+  left: -100%;
   top: 0;
-  width: 320px;
+  width: 280px;
   height: 100vh;
   z-index: 1000;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  padding: 2rem;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1.5rem;
+  border-radius: 0 32px 32px 0;
+}
+
+@media (min-width: 768px) {
+  .sidebar {
+    left: -320px;
+    width: 320px;
+    padding: 2rem;
+    gap: 2rem;
+  }
 }
 
 .sidebar.open {

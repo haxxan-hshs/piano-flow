@@ -15,8 +15,13 @@ function App() {
   const [colorfulKeys, setColorfulKeys] = useState(false);
   const [octaveOffset, setOctaveOffset] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
+    // Check if iOS
+    const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    setIsIOS(isIOSDevice);
+
     // Check if app is already installed
     if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
       setIsInstalled(true);
@@ -47,11 +52,12 @@ function App() {
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) {
-      // If prompt isn't available, check if it's already installed or not supported
       if (isInstalled) {
-        alert("PianoFlow is already installed on your device!");
+        alert("PianoFlow is already installed!");
+      } else if (isIOS) {
+        alert("To install on iOS: Tap the Share button (square with arrow) and select 'Add to Home Screen'.");
       } else {
-        alert("To install: Click the browser menu (⋮) and select 'Install' or 'Add to Home Screen'.");
+        alert("Installation is available in your browser's menu (e.g., 'Install App' or 'Add to Home Screen').");
       }
       return;
     }
@@ -73,32 +79,32 @@ function App() {
 
   return (
     <div className={`flex flex-col items-center justify-center w-full min-h-screen transition-colors duration-500 theme-${theme} ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
-      <div className="w-full max-w-5xl flex justify-between items-center mb-12 px-4 relative z-50">
-        <div className="flex items-center gap-6">
+      <div className="w-full max-w-5xl flex flex-wrap justify-between items-center mb-8 md:mb-12 px-4 relative z-50 gap-4">
+        <div className="flex items-center gap-3 md:gap-6">
           <button 
             onClick={() => setIsSidebarOpen(true)}
-            className={`p-3 rounded-2xl glass-panel text-visible hover:scale-110 transition-transform`}
+            className={`p-2 md:p-3 rounded-2xl glass-panel text-visible hover:scale-110 transition-transform`}
           >
-            <Menu size={24} />
+            <Menu size={20} className="md:w-6 md:h-6" />
           </button>
           <Logo theme={theme} />
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4 ml-auto sm:ml-0">
           <button 
             onClick={() => setTheme(isDark ? 'light' : 'dark')} 
-            className="btn btn-secondary shadow-lg p-3 rounded-2xl"
+            className="btn btn-secondary shadow-lg p-2 md:p-3 rounded-2xl"
           >
-            {isDark ? <Sun size={20} className="text-yellow-400" /> : <Moon size={20} className="text-slate-600" />}
+            {isDark ? <Sun size={18} className="text-yellow-400" /> : <Moon size={18} className="text-slate-600" />}
           </button>
 
           {!isInstalled && (
             <button
               onClick={handleInstallClick}
-              className={`btn ${deferredPrompt ? 'btn-primary' : 'btn-secondary'} shadow-lg flex items-center gap-2`}
+              className={`btn ${deferredPrompt ? 'btn-primary' : 'btn-secondary'} shadow-lg flex items-center gap-2 px-3 py-2 md:px-6 md:py-3`}
             >
-              <Download size={18} />
-              <span className="font-bold uppercase text-xs">Install App</span>
+              <Download size={16} className="md:w-5 md:h-5" />
+              <span className="font-bold uppercase text-[10px] md:text-xs">Install</span>
             </button>
           )}
         </div>
