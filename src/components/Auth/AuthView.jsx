@@ -10,7 +10,7 @@ import {
   Mail,
   ShieldCheck,
 } from 'lucide-react';
-import { getAuthRedirectUrl, supabase } from '../../lib/supabaseClient';
+import { getAuthRedirectUrl, isSupabaseConfigured, supabase } from '../../lib/supabaseClient';
 
 const modeContent = {
   login: {
@@ -88,6 +88,11 @@ function AuthView() {
 
     const normalizedEmail = email.trim().toLowerCase();
     const validationError = validateForm(normalizedEmail);
+
+    if (!isSupabaseConfigured) {
+      setError('Supabase environment variables are missing. Add them in Vercel and redeploy.');
+      return;
+    }
 
     if (validationError) {
       setError(validationError);

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { AuthContext } from './useAuth';
 
 export function AuthProvider({ children }) {
@@ -8,6 +8,11 @@ export function AuthProvider({ children }) {
   const [isLoadingSession, setIsLoadingSession] = useState(true);
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setIsLoadingSession(false);
+      return undefined;
+    }
+
     let isMounted = true;
 
     const loadSession = async () => {
@@ -51,6 +56,7 @@ export function AuthProvider({ children }) {
       user,
       isAuthenticated: Boolean(session?.user),
       isLoadingSession,
+      isSupabaseConfigured,
     }),
     [session, user, isLoadingSession],
   );

@@ -5,7 +5,7 @@ import { useAuth } from './context/useAuth';
 import { supabase } from './lib/supabaseClient';
 
 function App() {
-  const { user, isAuthenticated, isLoadingSession } = useAuth();
+  const { user, isAuthenticated, isLoadingSession, isSupabaseConfigured } = useAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
 
@@ -27,6 +27,26 @@ function App() {
       <main className="app-loader" aria-live="polite">
         <Loader2 className="spin" size={24} />
         <span>Loading your secure session</span>
+      </main>
+    );
+  }
+
+  if (!isSupabaseConfigured) {
+    return (
+      <main className="account-shell">
+        <section className="account-card">
+          <div className="brand-mark" aria-hidden="true">
+            <ShieldCheck size={26} />
+          </div>
+          <div className="account-copy">
+            <p className="eyebrow">Setup required</p>
+            <h1>Supabase env vars missing.</h1>
+            <p>
+              Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your deployment environment,
+              then redeploy the app.
+            </p>
+          </div>
+        </section>
       </main>
     );
   }
