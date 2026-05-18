@@ -1,0 +1,11 @@
+// supabase.js
+
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = sb_publishable_q8EMY4xIWclwf0E-tsCKOQ_fGVbp8M7
+const supabaseAnonKey = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wemhoaGd4dnBqYXR2c2tzZWdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMDk0MzgsImV4cCI6MjA5NDY4NTQzOH0.vlbiaGZSBRrT3_dcy17yIm-XsNbhTNK-7YYptAgjMIs
+
+export const supabase = createClient(
+  supabaseUrl,
+  supabaseAnonKey
+)
