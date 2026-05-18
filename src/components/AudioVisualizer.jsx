@@ -1,6 +1,6 @@
-import React, { useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 
-const AudioVisualizer = ({ analyser, theme }) => {
+const AudioVisualizer = ({ analyser }) => {
   const canvasRef = useRef(null);
 
   useEffect(() => {

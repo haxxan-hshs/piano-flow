@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useState } from 'react';
 
 const useAudioEngine = () => {
   const audioCtxRef = useRef(null);
@@ -10,12 +10,14 @@ const useAudioEngine = () => {
   
   const [isRecording, setIsRecording] = useState(false);
   const [sustain, setSustain] = useState(false);
+  const [analyserNode, setAnalyserNode] = useState(null);
 
   const initAudio = useCallback(() => {
     if (audioCtxRef.current) return;
 
     audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
     analyserRef.current = audioCtxRef.current.createAnalyser();
+    setAnalyserNode(analyserRef.current);
     masterGainRef.current = audioCtxRef.current.createGain();
     destinationRef.current = audioCtxRef.current.createMediaStreamDestination();
     
@@ -88,8 +90,7 @@ const useAudioEngine = () => {
     isRecording,
     sustain,
     setSustain,
-    analyser: analyserRef.current,
-    audioCtx: audioCtxRef.current,
+    analyser: analyserNode,
   };
 };
 

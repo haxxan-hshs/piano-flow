@@ -1,32 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import useAudioEngine from './hooks/useAudioEngine';
 import PianoKeyboard from './components/Piano/PianoKeyboard';
 import AudioVisualizer from './components/AudioVisualizer';
 import Logo from './components/Logo';
 import AdvancedSettings from './components/AdvancedSettings';
-import { Download, Sparkles, Menu, Moon, Sun } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import AuthView from './components/Auth/AuthView';
+import { useAuth } from './context/useAuth';
+import { supabase } from './lib/supabaseClient';
+import { Download, Loader2, LogOut, Menu, Moon, Sun } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 function App() {
   const { playNote, analyser, startRecording, stopRecording, isRecording, sustain, setSustain } = useAudioEngine();
+  const { user, isAuthenticated, isLoadingSession } = useAuth();
   const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [isInstalled, setIsInstalled] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(
+    () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true,
+  );
   const [theme, setTheme] = useState('light');
   const [colorfulKeys, setColorfulKeys] = useState(false);
   const [octaveOffset, setOctaveOffset] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
+  const [isIOS] = useState(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   useEffect(() => {
-    // Check if iOS
-    const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    setIsIOS(isIOSDevice);
-
-    // Check if app is already installed
-    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
-      setIsInstalled(true);
-    }
-
     const handleBeforeInstallPrompt = (e) => {
       // Prevent the mini-infobar from appearing on mobile
       e.preventDefault();
@@ -75,7 +73,26 @@ function App() {
     }
   };
 
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    await supabase.auth.signOut();
+    setIsSigningOut(false);
+  };
+
   const isDark = theme === 'dark';
+
+  if (isLoadingSession) {
+    return (
+      <div className="session-loader">
+        <Loader2 className="spin" size={28} />
+        <span>Securing your session...</span>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <AuthView />;
+  }
 
   return (
     <div className={`flex flex-col items-center justify-center w-full min-h-screen transition-colors duration-500 theme-${theme} ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
@@ -104,14 +121,24 @@ function App() {
               className={`btn ${deferredPrompt ? 'btn-primary' : 'btn-secondary'} shadow-lg flex items-center gap-2 px-3 py-2 md:px-6 md:py-3`}
             >
               <Download size={16} className="md:w-5 md:h-5" />
-              <span className="font-bold uppercase text-[10px] md:text-xs">Install</span>
+              <span className="nav-action-label">Install</span>
             </button>
           )}
+
+          <button
+            onClick={handleSignOut}
+            disabled={isSigningOut}
+            className="btn btn-secondary shadow-lg flex items-center gap-2 px-3 py-2 md:px-6 md:py-3"
+            title={user?.email ? `Signed in as ${user.email}` : 'Log out'}
+          >
+            {isSigningOut ? <Loader2 size={16} className="spin md:w-5 md:h-5" /> : <LogOut size={16} className="md:w-5 md:h-5" />}
+            <span className="nav-action-label">Logout</span>
+          </button>
         </div>
       </div>
 
       <div className="w-full max-w-5xl px-4">
-        <AudioVisualizer analyser={analyser} theme={theme} />
+        <AudioVisualizer analyser={analyser} />
         
         <motion.div 
           initial={{ y: 50, opacity: 0 }}

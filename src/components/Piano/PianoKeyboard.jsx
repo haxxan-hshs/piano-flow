@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const BASE_NOTES = [
@@ -27,20 +27,20 @@ const PianoKeyboard = ({ onPlayNote, octaveOffset = 0, colorfulKeys = false }) =
   const [activeKeys, setActiveKeys] = useState(new Set());
   const [notes, setNotes] = useState([]);
 
-  const playNoteWithOffset = useCallback((noteObj) => {
-    // Frequency doubles for each octave up
-    const frequency = noteObj.freq * Math.pow(2, octaveOffset);
-    onPlayNote(frequency);
-    addNoteEffect(noteObj.key);
-  }, [onPlayNote, octaveOffset]);
-
-  const addNoteEffect = (key) => {
+  const addNoteEffect = useCallback((key) => {
     const id = Date.now() + Math.random();
     setNotes(prev => [...prev, { id, key, startTime: Date.now() }]);
     setTimeout(() => {
       setNotes(prev => prev.filter(n => n.id !== id));
     }, 2000);
-  };
+  }, []);
+
+  const playNoteWithOffset = useCallback((noteObj) => {
+    // Frequency doubles for each octave up
+    const frequency = noteObj.freq * Math.pow(2, octaveOffset);
+    onPlayNote(frequency);
+    addNoteEffect(noteObj.key);
+  }, [onPlayNote, octaveOffset, addNoteEffect]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -89,7 +89,7 @@ const PianoKeyboard = ({ onPlayNote, octaveOffset = 0, colorfulKeys = false }) =
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [playNoteWithOffset, activeKeys, onPlayNote]);
+  }, [playNoteWithOffset, activeKeys, onPlayNote, addNoteEffect]);
 
   const handleMouseDown = (note) => {
     playNoteWithOffset(note);

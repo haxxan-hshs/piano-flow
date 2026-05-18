@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Settings, Mic, Square, Play, Pause, 
   Maximize, Bluetooth, Sparkles, X, 
-  Volume2, Music, List
+  Music
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -75,9 +75,9 @@ const AdvancedSettings = ({
 
   const connectMIDI = async () => {
     try {
-      const midi = await navigator.requestMIDIAccess();
+      await navigator.requestMIDIAccess();
       alert("MIDI Keyboard Connected Successfully!");
-    } catch (e) {
+    } catch {
       alert("MIDI not supported or no device found.");
     }
   };

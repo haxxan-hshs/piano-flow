@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Play, Pause, Upload, Volume2 } from 'lucide-react';
 
 const SongControls = ({ connectSource }) => {
