@@ -37,6 +37,85 @@ const NOTES = [
   { label: 'C2', key: 'K', type: 'white', frequency: 523.25 },
 ];
 
+const SOUND_PRESETS = {
+  glass: {
+    label: 'Glass Piano',
+    engine: 'webAudio',
+    oscillator: 'triangle',
+    attack: 0.018,
+    decay: 0.18,
+    sustain: 0.2,
+    release: 1.05,
+    brightness: 1,
+  },
+  warm: {
+    label: 'Warm Classic',
+    engine: 'webAudio',
+    oscillator: 'sine',
+    attack: 0.024,
+    decay: 0.26,
+    sustain: 0.28,
+    release: 1.3,
+    brightness: 0.72,
+  },
+  electric: {
+    label: 'Electric Keys',
+    engine: 'tone',
+    oscillator: 'fmsine',
+    attack: 0.01,
+    decay: 0.22,
+    sustain: 0.22,
+    release: 1,
+  },
+  bell: {
+    label: 'Crystal Bell',
+    engine: 'tone',
+    oscillator: 'amsine',
+    attack: 0.006,
+    decay: 0.36,
+    sustain: 0.05,
+    release: 1.5,
+  },
+  soft: {
+    label: 'Soft Pad',
+    engine: 'webAudio',
+    oscillator: 'sine',
+    attack: 0.08,
+    decay: 0.34,
+    sustain: 0.42,
+    release: 2,
+    brightness: 0.55,
+  },
+};
+
+function SplashIntro({ onFinish }) {
+  useEffect(() => {
+    const timer = window.setTimeout(onFinish, 1800);
+    return () => window.clearTimeout(timer);
+  }, [onFinish]);
+
+  return (
+    <section className="splash-intro" aria-label="Opening PianoFlow">
+      <div className="splash-card">
+        <div className="splash-logo" aria-hidden="true">
+          <Music2 size={34} />
+          <div className="splash-keys">
+            <span />
+            <span />
+            <span />
+          </div>
+        </div>
+        <p className="eyebrow">Welcome to</p>
+        <h1>PianoFlow</h1>
+        <p>Secure piano studio with recording, neon keys, MIDI, and app install.</p>
+        <button className="splash-skip" type="button" onClick={onFinish}>
+          Open App
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function PianoApp({ user }) {
   const audioContextRef = useRef(null);
   const masterGainRef = useRef(null);
@@ -45,12 +124,21 @@ function PianoApp({ user }) {
   const chunksRef = useRef([]);
   const metronomeRef = useRef(null);
   const deferredPromptRef = useRef(null);
+  const toneSynthRef = useRef(null);
+  const toneReverbRef = useRef(null);
+  const toneModuleRef = useRef(null);
+  const howlModuleRef = useRef(null);
+  const clickHowlRef = useRef(null);
   const [activeNote, setActiveNote] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [bpm, setBpm] = useState(120);
   const [isMetronomeOn, setIsMetronomeOn] = useState(false);
   const [sustain, setSustain] = useState(false);
+  const [velocitySensitivity, setVelocitySensitivity] = useState(true);
+  const [realisticPressure, setRealisticPressure] = useState(true);
+  const [reverb, setReverb] = useState(false);
+  const [soundPreset, setSoundPreset] = useState('glass');
   const [rainbowKeys, setRainbowKeys] = useState(false);
   const [midiStatus, setMidiStatus] = useState('Not connected');
   const [canInstall, setCanInstall] = useState(false);
@@ -61,6 +149,7 @@ function PianoApp({ user }) {
   const [signOutError, setSignOutError] = useState('');
 
   const whiteNotes = useMemo(() => NOTES.filter((note) => note.type === 'white'), []);
+  const selectedPreset = SOUND_PRESETS[soundPreset];
 
   const ensureAudio = useCallback(() => {
     if (!audioContextRef.current) {
@@ -79,29 +168,166 @@ function PianoApp({ user }) {
     return audioContextRef.current;
   }, []);
 
+  const getToneModule = useCallback(async () => {
+    if (!toneModuleRef.current) {
+      toneModuleRef.current = await import('tone');
+    }
+
+    return toneModuleRef.current;
+  }, []);
+
+  const playKeyClick = useCallback(async () => {
+    if (!howlModuleRef.current) {
+      howlModuleRef.current = await import('howler');
+    }
+
+    if (!clickHowlRef.current) {
+      clickHowlRef.current = new howlModuleRef.current.Howl({
+        src: [
+          'data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQ4AAAAAAP//AAAA//8AAP//AAA=',
+        ],
+        volume: 0.08,
+      });
+    }
+
+    clickHowlRef.current.play();
+  }, []);
+
+  const ensureToneSynth = useCallback(async () => {
+    ensureAudio();
+    const Tone = await getToneModule();
+    await Tone.start();
+
+    if (!toneReverbRef.current) {
+      toneReverbRef.current = new Tone.Reverb({ decay: 3, wet: 0.28 }).toDestination();
+    }
+
+    if (!toneSynthRef.current || toneSynthRef.current.presetKey !== soundPreset) {
+      toneSynthRef.current?.dispose();
+      const preset = SOUND_PRESETS[soundPreset];
+      const synth = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: preset.oscillator },
+        envelope: {
+          attack: preset.attack,
+          decay: preset.decay,
+          sustain: preset.sustain,
+          release: sustain ? preset.release + 1.2 : preset.release,
+        },
+      });
+
+      synth.presetKey = soundPreset;
+      synth.connect(reverb ? toneReverbRef.current : Tone.Destination);
+      toneSynthRef.current = synth;
+    }
+
+    return toneSynthRef.current;
+  }, [ensureAudio, getToneModule, reverb, soundPreset, sustain]);
+
+  useEffect(() => {
+    if (!toneSynthRef.current) return;
+
+    let isMounted = true;
+
+    const reconnect = async () => {
+      const Tone = await getToneModule();
+      if (!isMounted || !toneSynthRef.current) return;
+
+      toneSynthRef.current.disconnect();
+      toneSynthRef.current.connect(reverb && toneReverbRef.current ? toneReverbRef.current : Tone.Destination);
+    };
+
+    reconnect();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [getToneModule, reverb]);
+
+  useEffect(
+    () => () => {
+      clickHowlRef.current?.unload();
+      toneSynthRef.current?.dispose();
+      toneReverbRef.current?.dispose();
+    },
+    [],
+  );
+
+  const getVelocity = useCallback(
+    (note, pressure = 0.65) => {
+      if (!velocitySensitivity) return 0.76;
+
+      const normalizedPressure = Math.min(1, Math.max(0.18, pressure || 0.65));
+      const octaveLift = note.frequency > 500 ? 0.92 : 1;
+      return Math.min(0.98, Math.max(0.2, normalizedPressure * octaveLift));
+    },
+    [velocitySensitivity],
+  );
+
   const playNote = useCallback(
-    (note) => {
+    async (note, pressure = 0.65) => {
+      const velocity = getVelocity(note, pressure);
+
+      if (selectedPreset.engine === 'tone') {
+        const Tone = await getToneModule();
+        const synth = await ensureToneSynth();
+        const midi = 69 + 12 * Math.log2(note.frequency / 440);
+        const toneNote = Tone.Frequency(Math.round(midi), 'midi').toNote();
+        synth.triggerAttackRelease(toneNote, sustain ? '1.8n' : '8n', undefined, velocity);
+        playKeyClick();
+        setActiveNote(note.label);
+        window.setTimeout(() => setActiveNote((current) => (current === note.label ? '' : current)), 180);
+        return;
+      }
+
       const context = ensureAudio();
       const oscillator = context.createOscillator();
       const gain = context.createGain();
+      const filter = context.createBiquadFilter();
+      const convolver = reverb ? context.createConvolver() : null;
       const now = context.currentTime;
-      const releaseTime = sustain ? 2.4 : 0.9;
+      const releaseTime = sustain ? selectedPreset.release + 1.3 : selectedPreset.release;
+      const attack = realisticPressure ? selectedPreset.attack + (1 - velocity) * 0.04 : selectedPreset.attack;
 
-      oscillator.type = 'triangle';
+      oscillator.type = selectedPreset.oscillator;
       oscillator.frequency.setValueAtTime(note.frequency, now);
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(1200 + velocity * 3800 * selectedPreset.brightness, now);
       gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.42, now + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.48 * velocity, now + attack);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.02, selectedPreset.sustain * velocity), now + attack + selectedPreset.decay);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + releaseTime);
 
-      oscillator.connect(gain);
+      if (convolver) {
+        const seconds = 1.8;
+        const sampleRate = context.sampleRate;
+        const length = sampleRate * seconds;
+        const impulse = context.createBuffer(2, length, sampleRate);
+
+        for (let channel = 0; channel < impulse.numberOfChannels; channel += 1) {
+          const channelData = impulse.getChannelData(channel);
+          for (let index = 0; index < length; index += 1) {
+            channelData[index] = (Math.random() * 2 - 1) * (1 - index / length) ** 2;
+          }
+        }
+
+        convolver.buffer = impulse;
+      }
+
+      oscillator.connect(filter);
+      filter.connect(gain);
       gain.connect(masterGainRef.current);
+      if (convolver) {
+        gain.connect(convolver);
+        convolver.connect(masterGainRef.current);
+      }
       oscillator.start(now);
       oscillator.stop(now + releaseTime + 0.05);
+      playKeyClick();
 
       setActiveNote(note.label);
       window.setTimeout(() => setActiveNote((current) => (current === note.label ? '' : current)), 180);
     },
-    [ensureAudio, sustain],
+    [ensureAudio, ensureToneSynth, getToneModule, getVelocity, playKeyClick, realisticPressure, reverb, selectedPreset, sustain],
   );
 
   const playMetronomeClick = useCallback(() => {
@@ -141,7 +367,7 @@ function PianoApp({ user }) {
     const handleKeyDown = (event) => {
       const note = NOTES.find((item) => item.key.toLowerCase() === event.key.toLowerCase());
       if (!note || event.repeat) return;
-      playNote(note);
+      playNote(note, 0.7);
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -325,7 +551,7 @@ function PianoApp({ user }) {
           <Volume2 size={20} />
           <div>
             <span>Now playing</span>
-            <strong>{activeNote || 'Tap a key'}</strong>
+          <strong>{activeNote || selectedPreset.label}</strong>
           </div>
         </div>
 
@@ -341,7 +567,7 @@ function PianoApp({ user }) {
                   <button
                     className={`piano-key white-key ${activeNote === whiteNote.label ? 'is-active' : ''}`}
                     type="button"
-                    onPointerDown={() => playNote(whiteNote)}
+                    onPointerDown={(event) => playNote(whiteNote, event.pressure || 0.65)}
                   >
                     <span>{whiteNote.label}</span>
                     <small>{whiteNote.key}</small>
@@ -351,7 +577,7 @@ function PianoApp({ user }) {
                     <button
                       className={`piano-key black-key ${activeNote === blackNote.label ? 'is-active' : ''}`}
                       type="button"
-                      onPointerDown={() => playNote(blackNote)}
+                      onPointerDown={(event) => playNote(blackNote, event.pressure || 0.78)}
                     >
                       <span>{blackNote.label}</span>
                       <small>{blackNote.key}</small>
@@ -408,10 +634,39 @@ function PianoApp({ user }) {
             </div>
 
             <div className="tool-card compact">
+              <div className="tool-section-title">
+                <Music2 size={18} />
+                <span>Sound Engine</span>
+              </div>
+              <label className="select-field">
+                <span>Select tone</span>
+                <select value={soundPreset} onChange={(event) => setSoundPreset(event.target.value)}>
+                  {Object.entries(SOUND_PRESETS).map(([key, preset]) => (
+                    <option key={key} value={key}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button className={`toggle-row ${sustain ? 'is-on' : ''}`} type="button" onClick={() => setSustain((value) => !value)}>
                 <SlidersHorizontal size={18} />
                 <span>Sustain Pedal</span>
                 <strong>{sustain ? 'ON' : 'OFF'}</strong>
+              </button>
+              <button className={`toggle-row ${velocitySensitivity ? 'is-on' : ''}`} type="button" onClick={() => setVelocitySensitivity((value) => !value)}>
+                <Gauge size={18} />
+                <span>Velocity Sensitivity</span>
+                <strong>{velocitySensitivity ? 'ON' : 'OFF'}</strong>
+              </button>
+              <button className={`toggle-row ${reverb ? 'is-on' : ''}`} type="button" onClick={() => setReverb((value) => !value)}>
+                <Volume2 size={18} />
+                <span>Reverb</span>
+                <strong>{reverb ? 'ON' : 'OFF'}</strong>
+              </button>
+              <button className={`toggle-row ${realisticPressure ? 'is-on' : ''}`} type="button" onClick={() => setRealisticPressure((value) => !value)}>
+                <ShieldCheck size={18} />
+                <span>Realistic Key Pressure</span>
+                <strong>{realisticPressure ? 'ON' : 'OFF'}</strong>
               </button>
               <button className={`toggle-row ${rainbowKeys ? 'is-on' : ''}`} type="button" onClick={() => setRainbowKeys((value) => !value)}>
                 <Rainbow size={18} />
@@ -445,6 +700,11 @@ function PianoApp({ user }) {
 
 function App() {
   const { user, isAuthenticated, isLoadingSession, isSupabaseConfigured } = useAuth();
+  const [showSplash, setShowSplash] = useState(true);
+
+  const finishSplash = useCallback(() => {
+    setShowSplash(false);
+  }, []);
 
   if (isLoadingSession) {
     return (
@@ -453,6 +713,10 @@ function App() {
         <span>Loading PianoFlow</span>
       </main>
     );
+  }
+
+  if (showSplash) {
+    return <SplashIntro onFinish={finishSplash} />;
   }
 
   if (!isSupabaseConfigured) {
