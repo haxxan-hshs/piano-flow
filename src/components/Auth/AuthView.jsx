@@ -270,6 +270,18 @@ function AuthView() {
             {isSubmitting ? <Loader2 className="spin" size={18} /> : <ArrowRight size={18} />}
             {isSubmitting ? 'Please wait...' : content.action}
           </button>
+
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => {
+              localStorage.setItem('offline_guest_mode', 'true');
+              window.location.reload();
+            }}
+            style={{ width: '100%', border: '1px dashed var(--brand)', borderRadius: '16px', minHeight: '52px', marginTop: '10px' }}
+          >
+            Continue as Guest (Offline Mode)
+          </button>
         </form>
 
         {mode === 'forgot' && (

@@ -8,6 +8,17 @@ export function AuthProvider({ children }) {
   const [isLoadingSession, setIsLoadingSession] = useState(true);
 
   useEffect(() => {
+    const isOfflineGuest = localStorage.getItem('offline_guest_mode') === 'true';
+    if (isOfflineGuest) {
+      const mockSession = {
+        user: { email: 'guest@pianoflow.local', id: 'guest-id-offline-vault' }
+      };
+      setSession(mockSession);
+      setUser(mockSession.user);
+      setIsLoadingSession(false);
+      return undefined;
+    }
+
     if (!isSupabaseConfigured) {
       setIsLoadingSession(false);
       return undefined;

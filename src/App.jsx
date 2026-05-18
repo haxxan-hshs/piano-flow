@@ -16,10 +16,14 @@ import {
   Square,
   Volume2,
   X,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import AuthView from './components/Auth/AuthView';
 import { useAuth } from './context/useAuth';
 import { supabase } from './lib/supabaseClient';
+import { recordingsDB } from './lib/recordingsDB';
+import MyRecordings from './components/MyRecordings';
 
 const NOTES = [
   { label: 'C', key: 'A', type: 'white', frequency: 261.63 },
@@ -148,8 +152,9 @@ function PianoApp({ user }) {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
 
-  const whiteNotes = useMemo(() => NOTES.filter((note) => note.type === 'white'), []);
-  const selectedPreset = SOUND_PRESETS[soundPreset];
+  const [recordingsRefreshTrigger, setRecordingsRefreshTrigger] = useState(0);
+  const recordingStartTimeRef = useRef(null);
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
 
   const ensureAudio = useCallback(() => {
     if (!audioContextRef.current) {
@@ -167,6 +172,123 @@ function PianoApp({ user }) {
 
     return audioContextRef.current;
   }, []);
+
+  const [activeBackingTrack, setActiveBackingTrack] = useState(null);
+  const [removeVocals, setRemoveVocals] = useState(true);
+  const [isBackingPlaying, setIsBackingPlaying] = useState(false);
+
+  const backingAudioRef = useRef(null);
+  const backingSourceNodeRef = useRef(null);
+  const vocalRemoverNodeRef = useRef(null);
+
+  // setup Web Audio Vocal Remover Channel Subtraction Graph
+  const setupBackingAudioGraph = useCallback(() => {
+    const audio = backingAudioRef.current;
+    if (!audio) return;
+
+    const context = audioContextRef.current || ensureAudio();
+    if (!context) return;
+
+    if (!backingSourceNodeRef.current) {
+      try {
+        backingSourceNodeRef.current = context.createMediaElementSource(audio);
+      } catch (err) {
+        console.error('Failed to create media element source for backing track:', err);
+      }
+    }
+
+    const source = backingSourceNodeRef.current;
+    if (!source) return;
+
+    // Disconnect previous graph connections
+    source.disconnect();
+
+    if (removeVocals) {
+      const splitter = context.createChannelSplitter(2);
+      const leftGain = context.createGain();
+      leftGain.gain.setValueAtTime(1.0, context.currentTime);
+
+      const rightGain = context.createGain();
+      rightGain.gain.setValueAtTime(-1.0, context.currentTime); // Invert phase!
+
+      const merger = context.createChannelMerger(2);
+
+      source.connect(splitter);
+      splitter.connect(leftGain, 0); // L
+      splitter.connect(rightGain, 1); // R
+
+      leftGain.connect(merger, 0, 0);
+      rightGain.connect(merger, 0, 0);
+      leftGain.connect(merger, 0, 1);
+      rightGain.connect(merger, 0, 1);
+
+      merger.connect(masterGainRef.current);
+      vocalRemoverNodeRef.current = { splitter, leftGain, rightGain, merger };
+    } else {
+      source.connect(masterGainRef.current);
+      vocalRemoverNodeRef.current = null;
+    }
+  }, [ensureAudio, removeVocals]);
+
+  // Sync backing track source URL
+  useEffect(() => {
+    const audio = backingAudioRef.current;
+    if (!audio) return;
+
+    if (activeBackingTrack) {
+      const url = URL.createObjectURL(activeBackingTrack.blob);
+      audio.src = url;
+      audio.load();
+      setupBackingAudioGraph();
+
+      return () => {
+        audio.pause();
+        URL.revokeObjectURL(url);
+      };
+    } else {
+      audio.src = '';
+      setIsBackingPlaying(false);
+    }
+  }, [activeBackingTrack, setupBackingAudioGraph]);
+
+  // Sync vocal remover toggle changes
+  useEffect(() => {
+    if (activeBackingTrack) {
+      setupBackingAudioGraph();
+    }
+  }, [removeVocals, activeBackingTrack, setupBackingAudioGraph]);
+
+  // Backing track status event listeners
+  useEffect(() => {
+    const audio = backingAudioRef.current;
+    if (!audio) return;
+
+    const handlePlay = () => setIsBackingPlaying(true);
+    const handlePause = () => setIsBackingPlaying(false);
+    const handleEnded = () => {
+      setIsBackingPlaying(false);
+      audio.currentTime = 0;
+    };
+
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('ended', handleEnded);
+    };
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.remove('light-theme', 'dark-theme');
+    document.documentElement.classList.add(`${theme}-theme`);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const whiteNotes = useMemo(() => NOTES.filter((note) => note.type === 'white'), []);
+  const selectedPreset = SOUND_PRESETS[soundPreset];
 
   const getToneModule = useCallback(async () => {
     if (!toneModuleRef.current) {
@@ -265,6 +387,11 @@ function PianoApp({ user }) {
 
   const playNote = useCallback(
     async (note, pressure = 0.65) => {
+      if (activeBackingTrack && backingAudioRef.current && backingAudioRef.current.paused) {
+        ensureAudio();
+        backingAudioRef.current.play().catch((e) => console.log('Backing audio trigger error:', e));
+      }
+
       const velocity = getVelocity(note, pressure);
 
       if (selectedPreset.engine === 'tone') {
@@ -415,6 +542,7 @@ function PianoApp({ user }) {
 
     ensureAudio();
     chunksRef.current = [];
+    recordingStartTimeRef.current = Date.now();
 
     const recorder = new MediaRecorder(destinationRef.current.stream);
     mediaRecorderRef.current = recorder;
@@ -423,14 +551,19 @@ function PianoApp({ user }) {
       if (event.data.size > 0) chunksRef.current.push(event.data);
     };
 
-    recorder.onstop = () => {
+    recorder.onstop = async () => {
       const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `pianoflow-recording-${Date.now()}.webm`;
-      link.click();
-      URL.revokeObjectURL(url);
+      const duration = (Date.now() - recordingStartTimeRef.current) / 1000;
+      const formattedDate = new Date().toISOString().replace(/T/, '_').replace(/:/g, '-').split('.')[0];
+      const filename = `pianoflow-session_${formattedDate}.webm`;
+
+      try {
+        await recordingsDB.addRecording(blob, filename, duration, blob.size);
+        setRecordingsRefreshTrigger(prev => prev + 1);
+      } catch (err) {
+        console.error('Failed to auto-save recording to local vault:', err);
+      }
+
       chunksRef.current = [];
     };
 
@@ -493,6 +626,13 @@ function PianoApp({ user }) {
     setIsSigningOut(true);
     setSignOutError('');
 
+    if (localStorage.getItem('offline_guest_mode') === 'true') {
+      localStorage.removeItem('offline_guest_mode');
+      window.location.reload();
+      setIsSigningOut(false);
+      return;
+    }
+
     const { error } = await supabase.auth.signOut();
 
     if (error) {
@@ -516,6 +656,16 @@ function PianoApp({ user }) {
         </div>
 
         <div className="topbar-actions">
+          <button
+            className="theme-button"
+            type="button"
+            onClick={() => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'))}
+            aria-label="Toggle theme"
+            title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+          >
+            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
+
           {!isInstalled && (
             <button className="install-button" type="button" onClick={installApp}>
               <Download size={18} />
@@ -589,6 +739,87 @@ function PianoApp({ user }) {
           </div>
         </div>
       </section>
+
+      <audio 
+        ref={backingAudioRef}
+        preload="auto"
+        style={{ display: 'none' }}
+      />
+
+      {activeBackingTrack && (
+        <section className="backing-track-panel card-glass" aria-label="Piano Backing Track Accompaniment">
+          <div className="backing-track-container">
+            <div className="backing-track-info">
+              <Music2 size={24} className={`backing-rotator ${isBackingPlaying ? 'spinning-disc' : ''}`} />
+              <div>
+                <h3>Piano Backing Track Connected</h3>
+                <p className="track-name" title={activeBackingTrack.name}>{activeBackingTrack.name}</p>
+                <small className="help-text">Playing any piano key will automatically start playing this instrumental track!</small>
+              </div>
+            </div>
+
+            <div className="backing-track-controls">
+              <button 
+                type="button" 
+                className={`control-btn ${isBackingPlaying ? 'playing' : ''}`}
+                onClick={() => {
+                  if (backingAudioRef.current) {
+                    if (isBackingPlaying) {
+                      backingAudioRef.current.pause();
+                    } else {
+                      ensureAudio();
+                      backingAudioRef.current.play().catch(e => console.log(e));
+                    }
+                  }
+                }}
+                title={isBackingPlaying ? "Pause backing track" : "Play backing track"}
+              >
+                {isBackingPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+              </button>
+
+              <button 
+                type="button" 
+                className="control-btn"
+                onClick={() => {
+                  if (backingAudioRef.current) {
+                    backingAudioRef.current.pause();
+                    backingAudioRef.current.currentTime = 0;
+                    setIsBackingPlaying(false);
+                  }
+                }}
+                title="Stop backing track"
+              >
+                <Square size={16} fill="currentColor" />
+              </button>
+
+              <button 
+                type="button" 
+                className={`karaoke-toggle-btn ${removeVocals ? 'active' : ''}`}
+                onClick={() => setRemoveVocals(prev => !prev)}
+                title={removeVocals ? "Disable Vocal Remover" : "Enable Vocal Remover (Karaoke Mode)"}
+              >
+                <span>🎤 Karaoke Mode</span>
+                <strong>{removeVocals ? "ON (Vocal Remover)" : "OFF"}</strong>
+              </button>
+
+              <button 
+                type="button" 
+                className="disconnect-btn"
+                onClick={() => setActiveBackingTrack(null)}
+                title="Disconnect backing track from piano"
+              >
+                Disconnect
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <MyRecordings 
+        refreshTrigger={recordingsRefreshTrigger} 
+        activeBackingTrack={activeBackingTrack}
+        onBackingTrackConnect={setActiveBackingTrack}
+      />
 
       {isMenuOpen && (
         <div className="menu-overlay" role="presentation" onClick={() => setIsMenuOpen(false)}>
